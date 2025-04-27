@@ -149,84 +149,106 @@ class ipl_tournament:
 
 
 
+class ipl_simulation:
+    def __init__(self, teams, num_simulations, schedule_file):
+        self.teams = teams
+        self.num_simulations = num_simulations
+        self.schedule_file = schedule_file
+        self.final_points_table = []
+    
+    def run_one_simulation(self):
+        import copy
+        # create a new tournament
+        tournament = ipl_tournament()
+        for team in self.teams:
+            tournament.add_team(copy.deepcopy(team))
+        # read the schedule from the file
+        with open (self.schedule_file, "r") as f:
+            lines = f.readlines()
+            for line in lines:
+                match,team1, team2, prob1, prob2, prob_draw = line.strip().split(",")
+                prob1 = float(prob1)
+                prob2 = float(prob2)
+                prob_draw = float(prob_draw)
+                team1 = team1.strip()
+                team2 = team2.strip()
+                tournament.schedule_match(team1, team2, [prob1, prob2, prob_draw])
 
-## number of simulations
-num_simulations = 20000
-points_table = []
-final_probabilities = []
-
-for i in range(num_simulations):
-    # create teams
-    ## add current stats of teams
-
-    gt   = ipl_team(name="GT",   color="teal",    run_rate=1.104,  matches_played=8, wins=6, losses=2, draws=0, points=12)
-    dc   = ipl_team(name="DC",   color="blue",    run_rate=0.657,  matches_played=8, wins=6, losses=2, draws=0, points=12)
-    rcb  = ipl_team(name="RCB",  color="red",     run_rate=0.482,  matches_played=9, wins=6, losses=3, draws=0, points=12)
-    pbks = ipl_team(name="PBKS", color="maroon",  run_rate=0.177,  matches_played=9, wins=5, losses=3, draws=1, points=11)
-    mi   = ipl_team(name="MI",   color="blue",    run_rate=0.673,  matches_played=9, wins=5, losses=4, draws=0, points=10)
-    lsg  = ipl_team(name="LSG",  color="skyblue", run_rate=-0.054, matches_played=9, wins=5, losses=4, draws=0, points=10)
-    kkr  = ipl_team(name="KKR",  color="purple",  run_rate=0.212,  matches_played=9, wins=3, losses=5, draws=1, points=7)
-    srh  = ipl_team(name="SRH",  color="orange",  run_rate=-1.103, matches_played=9, wins=3, losses=6, draws=0, points=6)
-    rr   = ipl_team(name="RR",   color="pink",    run_rate=-0.625, matches_played=9, wins=2, losses=7, draws=0, points=4)
-    csk  = ipl_team(name="CSK",  color="yellow",  run_rate=-1.392, matches_played=8, wins=2, losses=6, draws=0, points=4)
-
-
-    tournament = ipl_tournament()
-    tournament.add_team(rcb)
-    tournament.add_team(mi)
-    tournament.add_team(csk)
-    tournament.add_team(kkr)
-    tournament.add_team(dc)
-    tournament.add_team(gt)
-    tournament.add_team(pbks)
-    tournament.add_team(rr)
-    tournament.add_team(srh)
-    tournament.add_team(lsg)
-
-    with open ("schdule.csv", "r") as f:
-        lines = f.readlines()
-        for line in lines:
-            match,team1, team2, prob1, prob2, prob_draw = line.strip().split(",")
-            prob1 = float(prob1)
-            prob2 = float(prob2)
-            prob_draw = float(prob_draw)
-            team1 = team1.strip()
-            team2 = team2.strip()
-            tournament.schedule_match(team1, team2, [prob1, prob2, prob_draw])
-
-    tournament.play_tournament()
-    #tournament.print_points_table()
-    points_table.append(tournament.return_points_table())
+        tournament.play_tournament()
+        #tournament.print_points_table()
+        return tournament.return_points_table()
+    
+    def run_simulation(self):
+        for i in range(self.num_simulations):
+            self.final_points_table.append(self.run_one_simulation())
+        
+        return self.final_points_table
 
 
-for team in tournament.teams:
-    team_name = team.name
-    count = 0
-    for i in range(num_simulations):
-        if team_name in [points_table[i][0][0] , points_table[i][1][0], points_table[i][2][0], points_table[i][3][0]]:
-            count += 1
-    probability = count / num_simulations
-    final_probabilities.append([team_name, probability])
-    print(f"Probability of {team_name} to end in top 4: {probability:.2f}")
+class simulation_visualizer:
+    def __init__(self, points_table, teams):
+        self.points_table = points_table
+        self.teams = teams
 
-# print graph of probabilities
-import matplotlib.pyplot as plt
+    def calculate_probabilities_of_team_in_top_x(self, x):
+        team_name_and_probabilities = []
+        # calculate the probability of each team to end in top x
+        for team in self.teams:
+            team_name = team.name
+            print(f"Calculating probability of {team_name} to end in top {x}")
+            count = 0
+            for i in range(len(self.points_table)):
+                for j in range(x):
+                    if team_name in [self.points_table[i][j][0]]:
+                        count += 1
+                        break
+            probability = count / len(self.points_table)
+            team_name_and_probabilities.append([team_name, probability])
+            print(f"Probability of {team_name} to end in top {x}: {probability:.2f}")
+        self.plot_probabilities(team_name_and_probabilities, f"Probability of teams to end in top {x}")
+        return team_name_and_probabilities
+    
+    def plot_probabilities(self,array_of_prob, title):
+        import matplotlib.pyplot as plt
+        sorted_probabilities = sorted(array_of_prob, key=lambda x: x[1], reverse=True)
+        teams = [x[0] for x in sorted_probabilities]
+        probabilities = [x[1] for x in sorted_probabilities]
+        plt.bar(teams, probabilities)
+        plt.xlabel('Teams')
+        plt.ylabel('Probability')
+        plt.title(title)
+        plt.xticks(rotation=45)
+        plt.ylim(0, 1)
+        plt.grid(axis='y')
+        #make the bars with team colors
+        for i in range(len(teams)):
+            plt.bar(teams[i], probabilities[i], color=self.teams[i].color)
+        # add text on top of the bars
+        for i in range(len(teams)):
+            plt.text(i, probabilities[i] + 0.01, f"{probabilities[i]:.2f}", ha='center', va='bottom', fontsize=8)
+        plt.tight_layout()
+        plt.show()
+    
 
-sorted_probabilities = sorted(final_probabilities, key=lambda x: x[1], reverse=True)
-teams = [x[0] for x in sorted_probabilities]
-probabilities = [x[1] for x in sorted_probabilities]
-plt.bar(teams, probabilities)
-plt.xlabel('Teams')
-plt.ylabel('Probability')
-plt.title('Probability of Teams to end in Top 4')
-plt.xticks(rotation=45)
-plt.ylim(0, 1)
-plt.grid(axis='y')
-#make the bars with team colors
-for i in range(len(teams)):
-    plt.bar(teams[i], probabilities[i], color=tournament.find_a_team_by_name(teams[i]).color)
-# add text on top of the bars
-for i in range(len(teams)):
-    plt.text(i, probabilities[i] + 0.01, f"{probabilities[i]:.2f}", ha='center', va='bottom', fontsize=8)
-plt.tight_layout()
-plt.show()
+# teams current stats
+gt   = ipl_team(name="GT",   color="teal",    run_rate=1.104,  matches_played=8, wins=6, losses=2, draws=0, points=12)
+dc   = ipl_team(name="DC",   color="blue",    run_rate=0.657,  matches_played=8, wins=6, losses=2, draws=0, points=12)
+rcb  = ipl_team(name="RCB",  color="red",     run_rate=0.482,  matches_played=9, wins=6, losses=3, draws=0, points=12)
+pbks = ipl_team(name="PBKS", color="maroon",  run_rate=0.177,  matches_played=9, wins=5, losses=3, draws=1, points=11)
+mi   = ipl_team(name="MI",   color="blue",    run_rate=0.673,  matches_played=9, wins=5, losses=4, draws=0, points=10)
+lsg  = ipl_team(name="LSG",  color="skyblue", run_rate=-0.054, matches_played=9, wins=5, losses=4, draws=0, points=10)
+kkr  = ipl_team(name="KKR",  color="purple",  run_rate=0.212,  matches_played=9, wins=3, losses=5, draws=1, points=7)
+srh  = ipl_team(name="SRH",  color="orange",  run_rate=-1.103, matches_played=9, wins=3, losses=6, draws=0, points=6)
+rr   = ipl_team(name="RR",   color="pink",    run_rate=-0.625, matches_played=9, wins=2, losses=7, draws=0, points=4)
+csk  = ipl_team(name="CSK",  color="yellow",  run_rate=-1.392, matches_played=8, wins=2, losses=6, draws=0, points=4)
+
+teams = [gt, dc, rcb, pbks, mi, lsg, kkr, srh, rr, csk]
+
+simulator= ipl_simulation(teams, num_simulations=10000, schedule_file="schdule.csv")
+
+final_rankings = simulator.run_simulation()
+
+
+view = simulation_visualizer(final_rankings, teams)
+view.calculate_probabilities_of_team_in_top_x(2)
+view.calculate_probabilities_of_team_in_top_x(4)
