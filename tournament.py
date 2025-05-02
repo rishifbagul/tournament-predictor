@@ -189,16 +189,26 @@ class ipl_simulation:
         for team in self.teams:
             tournament.add_team(copy.deepcopy(team))
         # read the schedule from the file
-        with open (self.schedule_file, "r") as f:
-            lines = f.readlines()
-            for line in lines:
-                match,team1, team2, prob1, prob2, prob_draw = line.strip().split(",")
-                prob1 = float(prob1)
-                prob2 = float(prob2)
-                prob_draw = float(prob_draw)
-                team1 = team1.strip()
-                team2 = team2.strip()
-                tournament.schedule_match(team1, team2, [prob1, prob2, prob_draw])
+        try:
+            with open (self.schedule_file, "r") as f:
+                lines = f.readlines()
+                for line in lines:
+                    if "match_id" in line:
+                        continue
+                    match,team1, team2, prob1, prob2, prob_draw = line.strip().split(",")
+                    prob1 = float(prob1)
+                    prob2 = float(prob2)
+                    prob_draw = float(prob_draw)
+                    team1 = team1.strip()
+                    team2 = team2.strip()
+                    tournament.schedule_match(team1, team2, [prob1, prob2, prob_draw])
+        except FileNotFoundError:
+            print("The schedule file was not found.")
+            return False
+        except Exception as e:
+            print(f"An error occurred while loading schedule: {e}")
+            print("Please check the format of the schedule file.")
+            return False
 
         tournament.play_tournament(favorite=favorite,fixed_result=fixed_result)
         #tournament.print_points_table()
@@ -207,13 +217,15 @@ class ipl_simulation:
     def run_simulation(self,faviorite=None):
         for i in range(self.num_simulations):
             self.final_points_table.append(self.run_one_simulation(favorite=faviorite))
+            if i % 1000 == 0:
+                print(f"Simulation {i}/{self.num_simulations} completed")
         
         return self.final_points_table
     def get_total_matches_in_schedule(self):
         # return the total number of matches in the schedule
         with open (self.schedule_file, "r") as f:
             lines = f.readlines()
-            return len(lines)
+            return len(lines)-1
     def get_combination(self,n, num_vars):
         n -= 1  # Convert to 0-based index
         digits = []
@@ -229,28 +241,32 @@ class ipl_simulation:
                 if points_table[i][1] >= points_table[3][1]:
                     return True
         return False
-    def find_valid_combination_for_a_favorite_team(self, favorite_team):
+    def find_valid_combination_for_a_favorite_team(self, favorite_team,start):
         # find the combination of matches that will make the favorite endup in playoffs
-        cobination_number = 0
         total_matches = self.get_total_matches_in_schedule()
-        for i in range(1, int(math.pow(3, total_matches)+1)):
+        total_combinations = int(math.pow(3, total_matches))
+        for i in range(start, total_combinations + 1):
             combination = self.get_combination(i, total_matches)
             if 2 in combination:
                 continue
             result=self.run_one_simulation(fixed_result=combination)
             if self.is_team_in_playoffs(favorite_team, result):
-                print(f"Combination {cobination_number}: {combination}")
-                print(f"Result: {result}")
-                return combination
-        for i in range(1, math.pow(3, total_matches)+1):
+                # print(f"Combination {cobination_number}: {combination}")
+                # print(f"Result: {result}")
+                return combination, result ,i
+            if i % 10000 == 0:
+                print(f"Simulation {i}/{total_combinations} completed")
+        for i in range(start, total_combinations + 1):
             combination = self.get_combination(i, total_matches)
             if 2 not in combination:
                 continue
             result=self.run_one_simulation(fixed_result=combination)
             if self.is_team_in_playoffs(favorite_team, result):
-                print(f"Combination {cobination_number}: {combination}")
-                print(f"Result: {result}")
-                return combination
+                # print(f"Combination {cobination_number}: {combination}")
+                # print(f"Result: {result}")
+                return combination, result,i
+            if i % 10000 == 0:
+                print(f"Simulation {i}/{total_combinations} completed")
         print("No valid combination found")
         return None
 class simulation_visualizer:
@@ -263,7 +279,7 @@ class simulation_visualizer:
         # calculate the probability of each team to end in top x
         for team in self.teams:
             team_name = team.name
-            print(f"Calculating probability of {team_name} to end in top {x}")
+            #print(f"Calculating probability of {team_name} to end in top {x}")
             count = 0
             for i in range(len(self.points_table)):
                 for j in range(x):
@@ -273,8 +289,8 @@ class simulation_visualizer:
             probability = count / len(self.points_table)
             team_name_and_probabilities.append([team_name, probability])
             print(f"Probability of {team_name} to end in top {x}: {probability:.2f}")
-        self.plot_probabilities(team_name_and_probabilities, f"Probability of teams to end in top {x}")
-        return team_name_and_probabilities
+        #self.plot_probabilities(team_name_and_probabilities, f"Probability of teams to end in top {x}")
+        return self.return_plot_data(team_name_and_probabilities)
     
     def plot_probabilities(self,array_of_prob, title):
         sorted_probabilities = sorted(array_of_prob, key=lambda x: x[1], reverse=True)
@@ -296,6 +312,17 @@ class simulation_visualizer:
         plt.tight_layout()
         plt.show()
     
+    def return_plot_data(self,array_of_prob):
+        sorted_probabilities = sorted(array_of_prob, key=lambda x: x[1], reverse=True)
+        teams = [x[0] for x in sorted_probabilities]
+        probabilities = [x[1] for x in sorted_probabilities]
+        colors = [self.find_team_color(team) for team in teams]
+        return {
+            'teams': teams,
+            'probabilities': probabilities,
+            'colors': colors
+        }
+
     def find_team_color(self, team_name):
         for team in self.teams:
             if team.name == team_name:
@@ -316,26 +343,125 @@ class simulation_visualizer:
                         if j > max_rank:
                             max_rank = j
             print(f"Team: {team_name}, Min Rank: {min_rank + 1}, Max Rank: {max_rank + 1}")
+    def show_combination(self, combination, result,schedule):
+        try:
+            with open (schedule, "r") as f:
+                lines = f.readlines()
+                for index, line in enumerate(lines):
+                    # continue first line
+                    if "match_id" in line:
+                        continue
+                    match,team1, team2, prob1, prob2, prob_draw = line.strip().split(",")
+                    prob1 = float(prob1)
+                    prob2 = float(prob2)
+                    prob_draw = float(prob_draw)
+                    team1 = team1.strip()
+                    team2 = team2.strip()
+                    if combination[index-1] == 0:
+                        print(f"Match Number {match} {team1.ljust(4)} Vs {team2.ljust(4)} Result=> {team1.ljust(4)} wins")
+                    elif combination[index-1] == 1:
+                        print(f"Match Number {match} {team1.ljust(4)} Vs {team2.ljust(4)} Result=> {team2.ljust(4)} wins")
+                    elif combination[index-1] == 2:
+                        print(f"Match Number {match} {team1.ljust(4)} Vs {team2.ljust(4)} Result=> Draw")
+            
+        except FileNotFoundError:
+            print("The schedule file was not found.")
+            return False
+        except Exception as e:
+            print(f"An error occurred while loading schedule: {e}")
+            print("Please check the format of the schedule file.")
+            return False
+        
+        print("\nFinal Points Table Will look like this")
+        for i in result:
+            print(f"Team: {i[0]}, Points: {i[1]}")
 
+class ipl_tournament_simulator:
+    def __init__(self):
+        self.schedule_file = "schedule.csv"
+        self.team_file = "teams.csv"
+        self.teams = []
+        self.fav_team_for_combination = None
+        self.combination_number = None
+    
+    def load_teams(self):
+        # load teams from the file
+        self.teams = []
+        try:
+            with open(self.team_file, "r") as f:
+                lines = f.readlines()
+                for line in lines:
+                    # continue first line
+                    if "team_name" in line:
+                        continue
+                    name, color, run_rate, matches_played, wins, losses, draws, points = line.strip().split(",")
+                    team = ipl_team(name.strip(), color.strip(), float(run_rate), int(matches_played), int(wins), int(losses), int(draws), int(points))
+                    self.teams.append(team)
+            return True
+        except FileNotFoundError:
+            print("The team file was not found.")
+            return False
+        except Exception as e:
+            print(f"An error occurred while loading teams: {e}")
+            print("Please check the format of the team file.")
+            return False
+    def top2_probability(self, sim_num):
+        # run the simulation and get the probability of the selected team to end in top 2
+        if not self.load_teams():
+            return
+        simulator = ipl_simulation(self.teams, num_simulations=sim_num, schedule_file=self.schedule_file)
+        final_rankings = simulator.run_simulation()
+        view = simulation_visualizer(final_rankings, self.teams)
+        return view.calculate_probabilities_of_team_in_top_x(2)
+    def playoff_probability(self, sim_num):
+        # run the simulation and get the probability of the selected team to end in playoffs
+        if not self.load_teams():
+            return
+        simulator = ipl_simulation(self.teams, num_simulations=sim_num, schedule_file=self.schedule_file)
+        final_rankings = simulator.run_simulation()
+        view = simulation_visualizer(final_rankings, self.teams)
+        return view.calculate_probabilities_of_team_in_top_x(4)
+    def best_chances(self, sim_num, fav_team):
+        # run the simulation and get the best chances of the selected team to end in playoffs
+        if not self.load_teams():
+            return
+        simulator = ipl_simulation(self.teams, num_simulations=sim_num, schedule_file=self.schedule_file)
+        final_rankings = simulator.run_simulation(faviorite=fav_team)
+        view = simulation_visualizer(final_rankings, self.teams)
+        return view.calculate_probabilities_of_team_in_top_x(4)
+    def find_scenarios(self, fav_team):
+        # find the scenarios for the selected team to end in playoffs
+        if not self.load_teams():
+            return
+        if self.fav_team_for_combination != fav_team:
+            self.fav_team_for_combination = fav_team
+            self.combination_number = 0
+        simulator = ipl_simulation(self.teams, num_simulations=1000, schedule_file=self.schedule_file)
+        combination, result, self.combination_number = simulator.find_valid_combination_for_a_favorite_team(fav_team,start=self.combination_number+1)
+        view = simulation_visualizer(result, self.teams)
+        view.show_combination(combination, result, self.schedule_file)
 
+# # teams current stats
+# gt   = ipl_team(name="GT",   color="teal",    run_rate=1.104,  matches_played=8, wins=6, losses=2, draws=0, points=12)
+# dc   = ipl_team(name="DC",   color="blue",    run_rate=0.482,  matches_played=9, wins=6, losses=3, draws=0, points=12)
+# rcb  = ipl_team(name="RCB",  color="red",     run_rate=0.521,  matches_played=10, wins=7, losses=3, draws=0, points=14)
+# pbks = ipl_team(name="PBKS", color="maroon",  run_rate=0.177,  matches_played=9, wins=5, losses=3, draws=1, points=11)
+# mi   = ipl_team(name="MI",   color="blue",    run_rate=0.889,  matches_played=10, wins=6, losses=4, draws=0, points=12)
+# lsg  = ipl_team(name="LSG",  color="skyblue", run_rate=-0.325, matches_played=10, wins=5, losses=5, draws=0, points=10)
+# kkr  = ipl_team(name="KKR",  color="purple",  run_rate=0.212,  matches_played=9, wins=3, losses=5, draws=1, points=7)
+# srh  = ipl_team(name="SRH",  color="orange",  run_rate=-1.103, matches_played=9, wins=3, losses=6, draws=0, points=6)
+# rr   = ipl_team(name="RR",   color="pink",    run_rate=-0.625, matches_played=9, wins=2, losses=7, draws=0, points=4)
+# csk  = ipl_team(name="CSK",  color="yellow",  run_rate=-1.392, matches_played=8, wins=2, losses=6, draws=0, points=4)
 
-# teams current stats
-gt   = ipl_team(name="GT",   color="teal",    run_rate=1.104,  matches_played=8, wins=6, losses=2, draws=0, points=12)
-dc   = ipl_team(name="DC",   color="blue",    run_rate=0.482,  matches_played=9, wins=6, losses=3, draws=0, points=12)
-rcb  = ipl_team(name="RCB",  color="red",     run_rate=0.521,  matches_played=10, wins=7, losses=3, draws=0, points=14)
-pbks = ipl_team(name="PBKS", color="maroon",  run_rate=0.177,  matches_played=9, wins=5, losses=3, draws=1, points=11)
-mi   = ipl_team(name="MI",   color="blue",    run_rate=0.889,  matches_played=10, wins=6, losses=4, draws=0, points=12)
-lsg  = ipl_team(name="LSG",  color="skyblue", run_rate=-0.325, matches_played=10, wins=5, losses=5, draws=0, points=10)
-kkr  = ipl_team(name="KKR",  color="purple",  run_rate=0.212,  matches_played=9, wins=3, losses=5, draws=1, points=7)
-srh  = ipl_team(name="SRH",  color="orange",  run_rate=-1.103, matches_played=9, wins=3, losses=6, draws=0, points=6)
-rr   = ipl_team(name="RR",   color="pink",    run_rate=-0.625, matches_played=9, wins=2, losses=7, draws=0, points=4)
-csk  = ipl_team(name="CSK",  color="yellow",  run_rate=-1.392, matches_played=8, wins=2, losses=6, draws=0, points=4)
+# teams = [gt, dc, rcb, pbks, mi, lsg, kkr, srh, rr, csk]
 
-teams = [gt, dc, rcb, pbks, mi, lsg, kkr, srh, rr, csk]
+# simulator= ipl_simulation(teams, num_simulations=1000, schedule_file="schdule.csv")
 
-simulator= ipl_simulation(teams, num_simulations=1000, schedule_file="schdule.csv")
-
-
+# main=ipl_tournament_simulator()
+# #main.top2_probability(100000)
+# #main.playoff_probability(10000)
+# #main.best_chances(10000, "CSK")
+# main.find_scenarios("RCB")
 # final_rankings = simulator.run_simulation()
 
 
@@ -345,4 +471,4 @@ simulator= ipl_simulation(teams, num_simulations=1000, schedule_file="schdule.cs
 # view.print_min_and_max_rank_of_each_team()
 
 
-simulator.find_valid_combination_for_a_favorite_team("CSK")
+# simulator.find_valid_combination_for_a_favorite_team("CSK")

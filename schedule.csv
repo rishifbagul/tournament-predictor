@@ -1,3 +1,4 @@
+match_id, team1, team2, prob_team1, prob_team2, prob_draw
 47, rr, gt, 0.22, 0.76, 0.02
 48, dc, kkr, 0.68, 0.30, 0.02
 49, csk, pbks, 0.28, 0.70, 0.02

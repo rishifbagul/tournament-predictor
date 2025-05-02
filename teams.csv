@@ -1,0 +1,11 @@
+team_name,color,run_rate,matches_played,wins,losses,draws,points
+GT,teal,1.104,8,6,2,0,12
+DC,blue,0.482,9,6,3,0,12
+RCB,red,0.521,10,7,3,0,14
+PBKS,maroon,0.177,9,5,3,1,11
+MI,blue,0.889,10,6,4,0,12
+LSG,skyblue,-0.325,10,5,5,0,10
+KKR,purple,0.212,9,3,5,1,7
+SRH,orange,-1.103,9,3,6,0,6
+RR,pink,-0.625,9,2,7,0,4
+CSK,yellow,-1.392,8,2,6,0,4
