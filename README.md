@@ -1,6 +1,6 @@
-# Tournament Predictor Application
+# IPL Tournament Predictor Application
 
-This application simulates and predicts outcomes for a sports tournament (such as IPL) based on the current team standings and remaining schedule. It provides probability-based insights to help you understand your team's chances of qualifying for the playoffs or finishing in the top positions.
+This application simulates and predicts outcomes for a IPL tournament (can be used for other sports tournaments as well) based on the current team standings and remaining schedule. It provides probability-based insights to help you understand your team's chances of qualifying for the playoffs or finishing in the top positions.
 
 ## Features
 
